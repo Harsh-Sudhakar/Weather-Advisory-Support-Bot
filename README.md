@@ -130,6 +130,8 @@ The left pane is the chat. The right pane is *why it said that*.
 ```
 parse_request
     |-- model unavailable ---------------> honest_failure
+    |-- small talk ----------------------> general_answer
+    |                                       `-- model unavailable -> honest_failure
     |-- not a weather question ----------> no_policy_answer
     `-> resolve_location
             |-- cannot resolve location -> honest_failure
@@ -144,7 +146,7 @@ parse_request
                                             `-> finalize
 ```
 
-**Eleven nodes, six conditional branch points.** Four of them exist only to fail honestly, which is
+**Twelve nodes, seven conditional branch points.** Four of them exist only to fail honestly, which is
 the point: the failure paths are the product, not an afterthought.
 
 | Node | File | Does |
@@ -158,6 +160,7 @@ the point: the failure paths are the product, not an afterthought.
 | `verify_grounding` | [grounding.py](app/grounding.py) | Checks every number in the reply, and every attribution the model made for it. |
 | `deterministic_answer` | [graph.py](app/graph.py) | The reply sent instead when that check fails. No model involved. |
 | `no_policy_answer` | [graph.py](app/graph.py) | "I don't have a policy covering that." No advice, no invention. |
+| `general_answer` | [graph.py](app/graph.py) | Small talk only. Says what the service is for; forbidden a reading or a word of advice. |
 | `honest_failure` | [graph.py](app/graph.py) | Says which stage failed and why. Never a forecast. |
 | `finalize` | [graph.py](app/graph.py) | The one place session memory is written and citations are built. |
 
@@ -336,6 +339,11 @@ not have, because `fetch_weather` raises rather than returning partial data and 
 never reached; and it cannot invent generic advice, because `no_policy_answer` is fixed text and the
 composer only ever receives guidance that came out of a YAML file.
 
+Small talk is the one reply with no policy behind it, so it is fenced rather than trusted:
+`general_reply` is handed no fact table at all, and is told to state no reading and give no advice of
+any kind. "Hello" gets a hello. "What should I cook tonight?" is still a request for advice nobody
+wrote down, and still gets the refusal.
+
 ---
 
 ## Session memory
@@ -403,6 +411,7 @@ event in the suite permanently, so the critical path is exercised on a calm day 
 | 14 | `conflict_same_severity` | Two `high` policies on a five-year-old in extreme heat. | Priority resolves it to `vulnerable_group_heat`, not file order. |
 | 15 | `mislabelled_number` | *Adversarial:* a real reading (gusts, 38.0) reported as a different one (wind, 22.0). | Attribution check rejects it; falls back to the deterministic answer. |
 | 16 | `ranking_stable` | Conflict resolution under five shuffled load orders. | Identical ranking every time. |
+| 17 | `small_talk` | *"hi there!"* &mdash; a greeting, which no policy covers and none should. | Takes the `general_answer` branch, cites nothing, states no number. |
 
 **Why those adversarial cases.** The brief suggests prompt injection, and case 9 covers it &mdash;
 the user's text is the only untrusted input reaching a model. But cases 10 and 15 are the more
@@ -552,7 +561,7 @@ Every ask in the brief, and where it lives.
 | Every answer traceable to a policy, or an explicit no-match | `finalize`, `no_policy_answer` | Citations built in code, never by the model |
 | Policy changes without touching fetch/model code | [sops/](sops/) + `load_sops()` | mtime hot-reload; caveat stated above |
 | Never a forecast it does not have | `fetch_weather` raises | Composer is never reached |
-| Never invented generic advice | `no_policy_answer` | Fixed text |
+| Never invented generic advice | `no_policy_answer` | Fixed text; small talk is fenced to no advice and no numbers |
 | Numbers must be the API's, enforced in code | [grounding.py](app/grounding.py) | Two layers, provenance + attribution |
 | Add an 11th SOP live, no control-flow change | Library tab / `sops/*.yaml` | Lint runs on save |
 | Session memory across turns | `MemorySaver` + `parse_request` | Two carry mechanisms, both tested |

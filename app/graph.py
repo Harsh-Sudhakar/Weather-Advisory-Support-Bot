@@ -4,7 +4,9 @@ Flow, with every branch that exists:
 
     parse_request
         |-- model unavailable ---------------> honest_failure
-        |-- not an outdoor question ---------> no_policy_answer
+        |-- small talk ----------------------> general_answer
+        |                                       `-- model unavailable -> honest_failure
+        |-- not a weather question ----------> no_policy_answer
         `-> resolve_location
                 |-- cannot resolve location -> honest_failure
                 `-> fetch_weather
@@ -17,8 +19,8 @@ Flow, with every branch that exists:
                                                 |-- ungrounded number -> deterministic_answer
                                                 `-> finalize
 
-    honest_failure, no_policy_answer and deterministic_answer all route into finalize,
-    which is the single place session memory is written.
+    honest_failure, no_policy_answer, general_answer and deterministic_answer all route into
+    finalize, which is the single place session memory is written.
 """
 
 import time
@@ -276,11 +278,25 @@ def no_policy_answer(state: BotState) -> dict:
             "trace": _step(state, "no_policy_answer", "ok", "answered without a policy citation", started)}
 
 
+def general_answer(state: BotState) -> dict:
+    """Small talk. No policy was selected and no reading was fetched, so the model is held to
+    saying what this service is for and nothing else."""
+    started = time.time()
+    try:
+        answer = llm.general_reply(state["question"], state["messages"][:-1])
+    except llm.LLMUnavailable as exc:
+        return {"failure": {"stage": "general", "reason": str(exc)},
+                "trace": _step(state, "general_answer", "error", str(exc), started)}
+    return {"answer": answer, "primary": None, "secondary": [],
+            "trace": _step(state, "general_answer", "ok", "small talk, no policy consulted", started)}
+
+
 FAILURE_TEXT = {
     "intent": "I couldn't reach the model that reads your question, so I can't answer this one right now.",
     "location": "I couldn't resolve that location, so I have no forecast for it. I won't guess at the weather.",
     "weather": "I couldn't reach the weather service, so I have no live data for that location. I'd rather tell you that than invent a forecast.",
     "compose": "I have the forecast and the policy that applies, but I couldn't reach the model that writes the reply.",
+    "general": "I couldn't reach the model that writes replies, so I can't even say hello back properly right now.",
 }
 
 
@@ -335,16 +351,24 @@ def finalize(state: BotState) -> dict:
 
 
 def route_after_parse(state: BotState) -> str:
-    """A question about the weather still gets real readings, even when no policy can apply to it.
+    """A message that is not a weather question is two different answers, not one.
 
-    Withholding advice we have not written down is the requirement. Withholding data the API would
-    have given us is not: reporting a number is not advising on it.
+    A question we have no policy for gets the refusal: withholding advice nobody wrote down is the
+    requirement. Small talk gets a plain reply instead, because there is nothing there to refuse,
+    and answering "hello" with "I have no policy covering that" reads as a fault rather than as
+    care. A weather question still gets real readings even when no policy applies, since reporting
+    a number is not advising on it.
     """
     if state.get("failure"):
         return "honest_failure"
-    if not state["intent"]["is_weather_question"]:
-        return "no_policy_answer"
-    return "resolve_location"
+    if state["intent"]["is_weather_question"]:
+        return "resolve_location"
+    return "general_answer" if state["intent"]["is_smalltalk"] else "no_policy_answer"
+
+
+def route_after_general(state: BotState) -> str:
+    """Small talk still goes through the model, so it still has an outage branch."""
+    return "honest_failure" if state.get("failure") else "finalize"
 
 
 def route_after_location(state: BotState) -> str:
@@ -385,18 +409,20 @@ def build_graph() -> "CompiledStateGraph":
     builder.add_node("verify_grounding", verify_grounding)
     builder.add_node("deterministic_answer", deterministic_answer)
     builder.add_node("no_policy_answer", no_policy_answer)
+    builder.add_node("general_answer", general_answer)
     builder.add_node("honest_failure", honest_failure)
     builder.add_node("finalize", finalize)
 
     builder.add_edge(START, "parse_request")
     builder.add_conditional_edges("parse_request", route_after_parse,
-                                  ["resolve_location", "no_policy_answer", "honest_failure"])
+                                  ["resolve_location", "no_policy_answer", "general_answer", "honest_failure"])
     builder.add_conditional_edges("resolve_location", route_after_location, ["fetch_weather", "honest_failure"])
     builder.add_conditional_edges("fetch_weather", route_after_weather, ["derive_facts", "honest_failure"])
     builder.add_edge("derive_facts", "match_policies")
     builder.add_conditional_edges("match_policies", route_after_match, ["compose_answer", "no_policy_answer"])
     builder.add_conditional_edges("compose_answer", route_after_compose, ["verify_grounding", "honest_failure"])
     builder.add_conditional_edges("verify_grounding", route_after_verify, ["finalize", "deterministic_answer"])
+    builder.add_conditional_edges("general_answer", route_after_general, ["finalize", "honest_failure"])
     builder.add_edge("deterministic_answer", "finalize")
     builder.add_edge("no_policy_answer", "finalize")
     builder.add_edge("honest_failure", "finalize")

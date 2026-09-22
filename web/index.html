@@ -533,23 +533,32 @@ function renderReadings(container, facts) {
   });
 }
 
+const tookGeneralBranch = (result) => result.trace.some((t) => t.node === "general_answer");
+
 function paintResult(turn, result) {
   const reply = turn.querySelector(".reply");
   const primary = result.citations.find((c) => c.role === "primary");
   const severity = primary ? primary.severity : "none";
   reply.className = "reply " + severity;
 
-  const label = primary ? severity : result.failure ? "no data" : "no policy";
+  // failure is checked first: a greeting whose model call died runs general_answer *and* lands
+  // on the failure branch, and the outage is the more important thing to say.
+  const general = tookGeneralBranch(result);
+  const label = primary ? severity : result.failure ? "no data" : general ? "general" : "no policy";
   const call = primary
     ? primary.verdict || primary.title
     : result.failure
       ? "No answer — I could not get the data"
-      : "No guidance — our policies do not cover this";
+      : general
+        ? "General reply — no policy needed here"
+        : "No guidance — our policies do not cover this";
   const source = primary
     ? `from policy <b>${esc(primary.id)}</b> &middot; ${esc(primary.title)}`
     : result.failure
       ? `the graph stopped at the <b>${esc(result.failure.stage)}</b> stage, so no forecast was given`
-      : "nothing in the policy set matched, so no advice is attached";
+      : general
+        ? "small talk, so no policy was consulted and no weather was fetched"
+        : "nothing in the policy set matched, so no advice is attached";
   reply.querySelector(".verdict").innerHTML =
     `<div class="verdict-row"><span class="sev-pill ${severity === "none" ? "none" : severity}">${esc(label)}</span></div>` +
     `<div class="verdict-call ${severity}">${esc(call)}</div>` +
@@ -643,7 +652,7 @@ function renderPolicy(result) {
   const panel = $("#tab-policy");
   if (!result.considered.length) {
     panel.innerHTML = `<p class="section-title">policy decision</p>
-      <div class="notice">No policy was evaluated for this turn. ${result.failure ? "The graph stopped at the " + esc(result.failure.stage) + " stage: " + esc(result.failure.reason) : "The question was not an outdoor-activity question, so the bot said it has no guidance rather than answering."}</div>`;
+      <div class="notice">No policy was evaluated for this turn. ${result.failure ? "The graph stopped at the " + esc(result.failure.stage) + " stage: " + esc(result.failure.reason) : tookGeneralBranch(result) ? "This turn was small talk, so the bot answered plainly without consulting a policy or fetching any weather." : "The question was not an outdoor-activity question, so the bot said it has no guidance rather than answering."}</div>`;
     return;
   }
   const matchedIds = result.citations.map((c) => c.id);
@@ -981,6 +990,7 @@ const G_NODES = {
   compose_answer:       [6, 198],
   verify_grounding:     [6, 236],
   finalize:             [6, 300],
+  general_answer:       [200, 84],
   no_policy_answer:     [200, 160],
   deterministic_answer: [200, 236],
   honest_failure:       [200, 276],
@@ -991,6 +1001,8 @@ const G_EDGES = [
   ["match_policies", "compose_answer"], ["compose_answer", "verify_grounding"],
   ["verify_grounding", "finalize"],
   ["parse_request", "no_policy_answer"], ["match_policies", "no_policy_answer"],
+  ["parse_request", "general_answer"], ["general_answer", "finalize"],
+  ["general_answer", "honest_failure"],
   ["verify_grounding", "deterministic_answer"],
   ["parse_request", "honest_failure"], ["resolve_location", "honest_failure"],
   ["fetch_weather", "honest_failure"], ["compose_answer", "honest_failure"],
@@ -1006,6 +1018,13 @@ function edgePath(from, to) {
   const sy = straightDown ? y1 + G_H : y1 + G_H / 2;
   const tx = straightDown ? x2 + G_W / 2 : x2;
   const ty = straightDown ? y2 : y2 + G_H / 2;
+  // A column is drawn top to bottom, so an edge that skips a row would otherwise be ruled
+  // straight through whatever sits between. Bow those out into the gutter instead.
+  const blocked = Object.values(G_NODES).some(([x, y]) => x === x1 && y > y1 && y < y2);
+  if (straightDown && blocked) {
+    const ey = y2 + G_H / 2;
+    return `M${sx},${sy}C${x1 - 40},${sy} ${x2 - 40},${ey} ${x2},${ey}`;
+  }
   if (straightDown) return `M${sx},${sy}L${tx},${ty}`;
   if (x2 < x1) return `M${x1 + G_W / 2},${y1 + G_H}C${x1 + G_W / 2},${y1 + 30} ${tx + G_W / 2},${ty - 30} ${tx + G_W / 2},${ty}`;
   return `M${sx},${sy}C${sx + 18},${sy} ${tx - 18},${ty} ${tx},${ty}`;

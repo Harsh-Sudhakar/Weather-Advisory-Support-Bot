@@ -48,5 +48,5 @@ jobs:
           nodes = [n for n in GRAPH.get_graph().nodes if not n.startswith('__')]
           branches = {e.source for e in GRAPH.get_graph().edges if e.conditional}
           print(f'{len(nodes)} nodes, {len(branches)} conditional branch points')
-          assert len(nodes) == 11
+          assert len(nodes) == 12
           "

@@ -394,6 +394,20 @@ def case_ranking_is_stable() -> Outcome:
     return Outcome(passed, f"5 shuffled loads all ranked {baseline}", {"baseline": baseline})
 
 
+def case_small_talk() -> Outcome:
+    """A greeting has nothing in it to refuse. The risk runs the other way: this is the only reply
+    with no policy behind it, so it is the only one that could wander into advice or into a number."""
+    result = graph.ask(session("smalltalk"), "hi there!")
+    path = [t["node"] for t in result["trace"]]
+    numbers = NUMBER.findall(result["answer"])
+    passed = "general_answer" in path and not result["citations"] and not numbers
+    return Outcome(
+        passed,
+        f"path={' -> '.join(path)}; citations={len(result['citations'])}; numbers stated={numbers or 'none'}",
+        {"answer": result["answer"], "trace": result["trace"]},
+    )
+
+
 CASES = [
     Case("clear_sop_wind", "A policy clearly applies: strong wind, cycling question",
          "That the wind policy is the one cited, and that the reply only quotes numbers from the payload.",
@@ -463,4 +477,9 @@ CASES = [
          "That conflict resolution is a total order over the policy set, not an artefact of the filesystem.",
          "five shuffled loads produce an identical ranking.",
          case_ranking_is_stable),
+    Case("small_talk", "A greeting, which no policy covers and none should",
+         "That small talk gets a plain reply rather than a refusal, and that the one reply with no "
+         "policy behind it still states no reading and offers no advice.",
+         "the greeting takes the general_answer branch, cites nothing and contains no number.",
+         case_small_talk),
 ]

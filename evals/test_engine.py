@@ -7,7 +7,7 @@ That is deliberately most of the logic this system is trusted for.
 
 import pytest
 
-from app import grounding
+from app import graph, grounding, llm
 from app.facts import POLICY_FACTS, build_facts, comfort_score, timeline
 from app.sops import OPS, Sop, evaluate, lint, lint_all, load_sops, match_all, rank
 from evals.fixtures import SCENARIOS
@@ -123,6 +123,47 @@ def test_a_correctly_attributed_number_passes():
     ok, problems = grounding.check("Gusts reach 38.0 km/h.", facts, [],
                                    claims=[{"value": 38.0, "fact": "gust_kmh"}])
     assert ok, problems
+
+
+# --- routing, which decides what kind of answer a question gets ---------------------------------
+
+def test_a_greeting_skips_the_policy_path():
+    state = {"intent": {"is_weather_question": False, "is_smalltalk": True}}
+    assert graph.route_after_parse(state) == "general_answer"
+
+
+def test_a_non_weather_question_is_still_refused():
+    """Small talk is the only thing that bypasses the refusal. "What should I cook tonight?" is
+    still a request for advice no policy covers, and must not reach a free-form reply."""
+    state = {"intent": {"is_weather_question": False, "is_smalltalk": False}}
+    assert graph.route_after_parse(state) == "no_policy_answer"
+
+
+def test_a_greeting_cites_nothing(monkeypatch):
+    monkeypatch.setattr(llm, "general_reply", lambda message, history: "Hello. Ask me about conditions.")
+    patch = graph.general_answer({"question": "hi", "messages": [{"role": "user", "content": "hi"}]})
+    assert patch["answer"] == "Hello. Ask me about conditions."
+    assert patch["primary"] is None and patch["secondary"] == []
+
+
+def test_a_greeting_with_no_model_takes_the_failure_branch(monkeypatch):
+    """Every other node that calls the model degrades into honest_failure. This one must too,
+    rather than raising out of the graph and 500ing the request."""
+    def down(message, history):
+        raise llm.LLMUnavailable("model call failed (APIConnectionError)")
+
+    monkeypatch.setattr(llm, "general_reply", down)
+    patch = graph.general_answer({"question": "hi", "messages": [{"role": "user", "content": "hi"}]})
+    assert patch["failure"]["stage"] == "general"
+    assert graph.route_after_general(patch) == "honest_failure"
+
+
+def test_a_failed_greeting_is_worded_rather_than_crashing():
+    """honest_failure indexes FAILURE_TEXT by stage, so a stage with no entry reaches the user
+    as a KeyError."""
+    patch = graph.honest_failure({"failure": {"stage": "general", "reason": "model call failed"}})
+    assert patch["answer"].strip()
+    assert patch["primary"] is None
 
 
 # --- the policy set itself ----------------------------------------------------------------------
