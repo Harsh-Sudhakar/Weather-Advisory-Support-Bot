@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://weather-advisory-bot.onrender.com" target="_blank" rel="noopener noreferrer">
+  <a href="https://weather-advisory-bot-jqry.onrender.com/" target="_blank" rel="noopener noreferrer">
     <img src="https://img.shields.io/badge/%E2%96%B6%20Live%20Demo-Try%20it%20Now-2563EB?style=for-the-badge&logo=googlechrome&logoColor=white" alt="Live Demo" />
   </a>
 </p>
