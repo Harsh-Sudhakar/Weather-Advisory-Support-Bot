@@ -13,6 +13,14 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_valida
 
 SOP_DIR = Path(os.getenv("SOP_DIR", Path(__file__).resolve().parent.parent / "sops"))
 SEVERITY_ORDER = ["info", "low", "moderate", "high", "critical"]
+# Phrases from the browser editor's new-policy TEMPLATE (web/index.html). A policy still carrying
+# them was saved unedited, and would hand the composer no advice to convey, so the model fills the
+# gap with its own - the one thing this system exists to prevent.
+PLACEHOLDER_TEXT = (
+    "what this policy is called",
+    "what the bot should tell the user",
+    "the decision in a few words",
+)
 
 
 class SopError(ValueError):
@@ -44,6 +52,14 @@ class Sop(BaseModel):
         """Reject an unknown operator at load, not silently at match time."""
         _check_conditions(conditions)
         return conditions
+
+    @field_validator("title", "guidance", "verdict")
+    @classmethod
+    def not_template_placeholder(cls, text: str) -> str:
+        """Reject the editor's template text, which is long enough to pass every other check."""
+        if any(phrase in text.lower() for phrase in PLACEHOLDER_TEXT):
+            raise ValueError("still the new-policy template's placeholder text; write the real one")
+        return text
 
     @property
     def severity_rank(self) -> int:

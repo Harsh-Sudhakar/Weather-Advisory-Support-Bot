@@ -62,7 +62,11 @@ def _chat(messages: list[dict], json_mode: bool, max_tokens: int, _retry: bool =
         response = _client().chat.completions.create(**kwargs)
     except OpenAIError as exc:
         raise LLMUnavailable(f"model call failed ({exc.__class__.__name__})") from exc
-    content = response.choices[0].message.content
+    try:
+        content = response.choices[0].message.content
+    except (IndexError, AttributeError, TypeError):
+        # A provider-side error can arrive as a 200 with no choices; treat it as an empty reply.
+        content = None
     if not content and not _retry:
         return _chat(messages, json_mode, max_tokens, _retry=True)
     if not content:
@@ -118,8 +122,11 @@ Rules:
   travel_commute. "Is it a nice day to sit in the park with friends" is leisure_social.
 - audience is who the activity is for. Default to ["general"].
 - time_window: use "now" unless the user names a part of the day. "Later today" is "today".
-- when nothing is told by default consider the time to be today.
-- When no intent is told assume user is asking wheather is it safe to do that activity today or not.
+- A message that only names an activity ("cycling in Pune") is asking whether it is safe to do it,
+  so it is an outdoor question.
+- A follow-up that changes only the time, the place or who it is for ("what about this evening?",
+  "is it OK for my dog too?", "and for my grandmother?") continues the earlier outdoor question:
+  it is an outdoor question, with the audience it names.
 - is_smalltalk is for a message with no request in it: "hi", "good morning", "thanks", "who are
   you", "what can you do". A message that asks for advice or information is never small talk,
   however far from weather it sits: "what should I cook tonight" is false.

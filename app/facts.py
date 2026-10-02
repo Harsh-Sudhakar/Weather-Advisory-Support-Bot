@@ -119,12 +119,15 @@ def build_facts(payload: dict, window: str) -> tuple[dict, dict]:
     daily = payload.get("daily", {})
 
     if window == "now":
-        temp = round(current["temperature_2m"], 1)
-        apparent = round(current["apparent_temperature"], 1)
-        wind = round(current["wind_speed_10m"], 1)
-        gust = round(current["wind_gusts_10m"], 1)
-        uv = round(current["uv_index"], 1) if current.get("uv_index") is not None else _max(take("uv_index"))
-        humidity = round(current["relative_humidity_2m"], 1)
+        # A null reading stays None, so a policy that needs it reports the fact as missing rather
+        # than the whole turn crashing on round(None).
+        reading = lambda field: round(current[field], 1) if current.get(field) is not None else None
+        temp = reading("temperature_2m")
+        apparent = reading("apparent_temperature")
+        wind = reading("wind_speed_10m")
+        gust = reading("wind_gusts_10m")
+        uv = reading("uv_index") if current.get("uv_index") is not None else _max(take("uv_index"))
+        humidity = reading("relative_humidity_2m")
         source = "open-meteo current observation"
     else:
         temp = _mean(take("temperature_2m"))
@@ -149,7 +152,7 @@ def build_facts(payload: dict, window: str) -> tuple[dict, dict]:
         "rain_24h_mm": _sum(hourly["precipitation"][next24]),
         "gust_max_24h_kmh": _max(hourly["wind_gusts_10m"][next24]),
         "precip_prob_max_24h_pct": _max(hourly["precipitation_probability"][next24]),
-        "daily_precip_sum_mm": round(daily["precipitation_sum"][0], 1) if daily.get("precipitation_sum") else None,
+        "daily_precip_sum_mm": _max(daily.get("precipitation_sum", [])[:1]),
         "local_hour": _hour(current["time"]),
         "is_day": bool(current.get("is_day", 1)),
         "observed_at": current["time"],

@@ -5,13 +5,13 @@
 # hosting shares that IP with strangers who may already have spent the quota. An Always Free
 # instance has a public IPv4 of its own, so the quota is ours alone.
 #
-#   curl -fsSL https://raw.githubusercontent.com/SatyamSingh-Git/Weather-Advisory-Support-Bot/main/deploy/oracle-setup.sh | bash -s -- sk-or-v1-YOUR_KEY
+#   curl -fsSL https://raw.githubusercontent.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot/main/deploy/oracle-setup.sh | bash -s -- sk-or-v1-YOUR_KEY
 #
 set -euo pipefail
 
 KEY="${1:?usage: oracle-setup.sh <OPENROUTER_API_KEY> [MODEL]}"
 MODEL="${2:-deepseek/deepseek-v4-flash}"
-REPO="https://github.com/SatyamSingh-Git/Weather-Advisory-Support-Bot.git"
+REPO="https://github.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot.git"
 APP_DIR=/opt/weather-advisory-bot
 
 # nip.io resolves <dashed-ip>.nip.io to that IP, which lets Let's Encrypt issue a real certificate

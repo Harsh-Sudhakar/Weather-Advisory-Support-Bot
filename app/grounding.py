@@ -13,12 +13,15 @@ Two layers, because they catch different lies:
 
 import re
 
-NUMBER = re.compile(r"\d+(?:\.\d+)?")
+# A leading minus counts only when it is not joining two words or numbers, so "-3 C" is negative
+# while "5-10 minutes" and "2026-10-02" are not. Thousands separators are kept with their number:
+# read naively, "1,200 m" is a 1 and a 200, neither of which is the reading.
+NUMBER = re.compile(r"(?:(?<![\w.,])[-−])?(?<![\d.])(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?")
 TOLERANCE = 0.5
 
 
 def _numbers_in(text: str) -> list[float]:
-    return [float(m) for m in NUMBER.findall(text)]
+    return [float(m.replace(",", "").replace("−", "-")) for m in NUMBER.findall(text)]
 
 
 def _threshold_values(conditions: list) -> list[float]:

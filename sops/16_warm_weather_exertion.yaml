@@ -1,0 +1,15 @@
+id: warm_weather_exertion
+title: Exercising in warm conditions
+verdict: Go, but cooler hours and lighter
+category: outdoor_exercise
+severity: moderate
+priority: 6
+requires_facts: [apparent_temp_c]
+when:
+  - {fact: activity_category, op: includes_any, value: [outdoor_exercise]}
+  - {fact: apparent_temp_c, op: between, value: [32, 38]}
+guidance: >
+  It is warm enough that sustained effort adds real heat load, though it is below our heat-stress
+  threshold. The activity can go ahead. Advise going in the early morning or after sunset if the
+  plan allows, keeping the pace easier and the session shorter than usual, carrying water and
+  drinking before thirst, and stopping to cool down at the first sign of dizziness or a headache.

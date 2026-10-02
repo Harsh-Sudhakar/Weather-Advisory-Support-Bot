@@ -22,8 +22,8 @@
 <p align="center">
   <img alt="Python 3.12" src="https://img.shields.io/badge/python-3.12-3776AB?logo=python&logoColor=white" />
   <img alt="LangGraph" src="https://img.shields.io/badge/LangGraph-11%20nodes%20%C2%B7%206%20branches-1C3C3C" />
-  <img alt="Policies" src="https://img.shields.io/badge/policies-15%20YAML%20files-4B8BBE" />
-  <a href="https://github.com/SatyamSingh-Git/Weather-Advisory-Support-Bot/actions"><img alt="checks" src="https://github.com/SatyamSingh-Git/Weather-Advisory-Support-Bot/actions/workflows/ci.yml/badge.svg" /></a>
+  <img alt="Policies" src="https://img.shields.io/badge/policies-17%20YAML%20files-4B8BBE" />
+  <a href="https://github.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot/actions"><img alt="checks" src="https://github.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot/actions/workflows/ci.yml/badge.svg" /></a>
   <img alt="Evals" src="https://img.shields.io/badge/evals-16%2F16%20passing-3fb950" />
   <img alt="Data" src="https://img.shields.io/badge/data-Open--Meteo-f0883e" />
 </p>
@@ -58,7 +58,7 @@
 ## Quick start
 
 ```bash
-git clone https://github.com/SatyamSingh-Git/Weather-Advisory-Support-Bot.git
+git clone https://github.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot.git
 cd Weather-Advisory-Support-Bot
 python -m venv .venv && . .venv/bin/activate     # Windows: .venv\Scriptsctivate
 pip install -r requirements.txt
@@ -111,7 +111,7 @@ The left pane is the chat. The right pane is *why it said that*.
 | **Graph trace** | The graph drawn as a diagram that **lights up as the run happens** &mdash; each node and the edge that reached it animate in as the stream reports them, branches not taken stay dim. Below it, the same nodes as a list with timings. |
 | **Policy** | The cited policy with **every condition evaluated against the real numbers** (`gust_kmh = 63.0 >= 50 PASS`), plus every policy that was considered and rejected, and why. |
 | **Facts** | Two forecast panels for the next 24 hours with the requested window shaded and the **policy threshold drawn as a labelled reference line**, so you can see the hour a rule trips. Below them, the fact table the answer was allowed to quote from, each fact tagged with its source. |
-| **Library** | All 15 policies, editable in the browser. Save one and it is live on the next message &mdash; and the editor lints it, so a rule that would silently never fire tells you instead. |
+| **Library** | All 17 policies, editable in the browser. Save one and it is live on the next message &mdash; and the editor lints it, so a rule that would silently never fire tells you instead. |
 
 **Run injection test** in the header fires the adversarial prompt so you can watch the bot refuse it.
 
@@ -153,7 +153,7 @@ the point: the failure paths are the product, not an afterthought.
 | --- | --- | --- |
 | `parse_request` | [graph.py](app/graph.py) | One model call. Classifies the question against a closed enum, merges anything carried from earlier turns. |
 | `resolve_location` | [weather.py](app/weather.py) | Geocodes the place name. A no-result and a network error take the same branch. |
-| `fetch_weather` | [weather.py](app/weather.py) | `current` + 72h `hourly` + `daily`, timezone-resolved. Raises rather than returning a partial. |
+| `fetch_weather` | [weather.py](app/weather.py) | `current` + 48h `hourly` + `daily`, timezone-resolved. Raises rather than returning a partial. |
 | `derive_facts` | [facts.py](app/facts.py) | Builds the fact table for the window asked about, plus provenance per fact. |
 | `match_policies` | [sops.py](app/sops.py) | Pure Python. Evaluates every policy, keeps each condition's result, ranks the matches. |
 | `compose_answer` | [llm.py](app/llm.py) | The second and last model call. Words the policy that code already picked. |
@@ -240,7 +240,7 @@ judgement this system exists to withhold from it.
 policy cannot match on a guess &mdash; it simply does not match, and the inspector names the missing
 fact.
 
-**15 policies · 6 categories · all 5 severities.**
+**17 policies · 6 categories · all 5 severities.**
 
 | | |
 | --- | --- |
@@ -371,7 +371,7 @@ asked.
 ```bash
 python -m evals.run_evals        # prints a table, writes evals/report.html
 pytest evals -v                  # same cases as tests
-pytest evals/test_engine.py      # 34 tests that need no API key
+pytest evals/test_engine.py      # 56 tests that need no API key
 ```
 
 The full suite drives the graph and so needs a model key. `test_engine.py` covers the parts that
@@ -472,7 +472,7 @@ The live instance is at **<https://140-245-253-170.nip.io>**, on an Oracle Cloud
 under systemd, and Caddy terminating TLS:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/SatyamSingh-Git/Weather-Advisory-Support-Bot/main/deploy/oracle-setup.sh   | bash -s -- sk-or-v1-YOUR_KEY
+curl -fsSL https://raw.githubusercontent.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot/main/deploy/oracle-setup.sh   | bash -s -- sk-or-v1-YOUR_KEY
 ```
 
 Then open ports 80 and 443 in the OCI console (VCN &rarr; Subnet &rarr; Security List &rarr; Ingress,

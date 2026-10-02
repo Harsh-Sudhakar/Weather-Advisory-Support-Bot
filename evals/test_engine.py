@@ -125,6 +125,78 @@ def test_a_correctly_attributed_number_passes():
     assert ok, problems
 
 
+def test_a_negative_reading_is_grounded():
+    """Cold-exposure replies quote sub-zero temperatures; reading "-3.5" as 3.5 failed every one."""
+    facts = {"apparent_temp_c": -3.5}
+    ok, problems = grounding.check("It feels like -3.5°C out there.", facts, [],
+                                   claims=[{"value": -3.5, "fact": "apparent_temp_c"}])
+    assert ok, problems
+
+
+def test_a_hyphenated_range_is_not_read_as_negative():
+    assert grounding._numbers_in("Rest for 5-10 minutes.") == [5.0, 10.0]
+    assert grounding._numbers_in("observed 2026-10-02") == [2026.0, 10.0, 2.0]
+
+
+def test_a_thousands_separator_stays_one_number():
+    facts = {"visibility_m": 1200.0}
+    ok, problems = grounding.check("Visibility is down to 1,200 m.", facts, [],
+                                   claims=[{"value": 1200, "fact": "visibility_m"}])
+    assert ok, problems
+
+
+def test_a_null_current_reading_is_missing_not_a_crash():
+    payload = SCENARIOS["pleasant"]
+    patched = {**payload, "current": {**payload["current"], "wind_gusts_10m": None}}
+    facts, _ = build_facts(patched, "now")
+    assert facts["gust_kmh"] is None
+
+
+def test_a_former_city_name_is_searched_under_its_current_one():
+    from app.weather import _modern_name
+    assert _modern_name("Bangalore") == "Bengaluru"
+    assert _modern_name("bombay, Maharashtra") == "Mumbai, Maharashtra"
+    assert _modern_name("Bhopal") == "Bhopal"
+
+
+# --- session state, which the checkpointer carries between turns --------------------------------
+
+def _intent(**overrides):
+    base = dict(location="Bhopal", activity_category=["outdoor_exercise"], audience=["general"],
+                time_window="now", is_outdoor_question=True, is_smalltalk=False,
+                is_weather_question=True, restated="")
+    return {**base, **overrides}
+
+
+def test_a_new_turn_clears_the_last_turns_results(monkeypatch):
+    """A follow-up that never reaches the weather nodes must not report the previous turn's place,
+    readings or rejected policies as its own."""
+    monkeypatch.setattr(llm, "extract_intent", lambda m, h: _intent(
+        location=None, activity_category=[], is_outdoor_question=False, is_weather_question=False))
+    previous = {"question": "what should I cook?", "messages": [], "facts": {"temp_c": 30.0},
+                "evaluations": [{"sop": None}], "place": {"name": "Bhopal"}, "series": {"hours": []}}
+    patch = graph.parse_request(previous)
+    assert patch["facts"] is None and patch["evaluations"] == [] and patch["place"] is None
+
+
+def test_a_failed_parse_also_clears_the_last_turns_results(monkeypatch):
+    def down(message, history):
+        raise llm.LLMUnavailable("model call failed (APIConnectionError)")
+
+    monkeypatch.setattr(llm, "extract_intent", down)
+    patch = graph.parse_request({"question": "and now?", "messages": [], "facts": {"temp_c": 30.0}})
+    assert patch["failure"]["stage"] == "intent" and patch["facts"] is None
+
+
+def test_small_talk_does_not_erase_the_activity_a_follow_up_inherits(monkeypatch):
+    carried = {"activity_category": ["outdoor_exercise"], "audience": ["general"]}
+    monkeypatch.setattr(llm, "extract_intent", lambda m, h: _intent(
+        location=None, activity_category=[], is_outdoor_question=False,
+        is_weather_question=False, is_smalltalk=True))
+    patch = graph.parse_request({"question": "thanks!", "messages": [], "session_intent": carried})
+    assert patch["session_intent"] == carried
+
+
 # --- routing, which decides what kind of answer a question gets ---------------------------------
 
 def test_a_greeting_skips_the_policy_path():
@@ -207,6 +279,9 @@ def test_every_policy_condition_uses_a_known_fact():
     ({"guidance": "be careful"}, "guidance too short to be actionable advice"),
     ({"when": [{"fact": "uv_index", "op": "exceeds", "value": 8}]}, "unknown operator"),
     ({"cite_as": "SOP-1"}, "unknown key, most likely a typo for an existing one"),
+    ({"guidance": "What the bot should tell the user when this policy applies."},
+     "editor template saved unedited, so the model would invent the advice"),
+    ({"title": "What this policy is called"}, "editor template title cited to the user"),
 ])
 def test_a_malformed_policy_is_rejected_with_the_reason(bad, because):
     from pydantic import ValidationError

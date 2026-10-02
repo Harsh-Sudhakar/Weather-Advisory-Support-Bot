@@ -32,7 +32,7 @@ from langgraph.graph import END, START, StateGraph
 if TYPE_CHECKING:
     from langgraph.graph.state import CompiledStateGraph
 
-from . import grounding, llm, sops as policy, weather
+from . import grounding, llm, weather, sops as policy
 from .facts import build_facts, timeline
 
 OP_TEXT = {
@@ -69,6 +69,16 @@ def _step(state, node, status, detail, started):
     return state.get("trace", []) + [entry]
 
 
+# The checkpointer keeps every key between turns, so anything one turn computes is still there on
+# the next unless it is cleared. Without this, a follow-up that never fetches weather would report
+# the previous turn's place, readings and rejected policies as its own.
+TURN_RESET = {
+    "failure": None, "intent": None, "place": None, "facts": None, "provenance": {},
+    "raw_weather": None, "series": None, "reading_age_seconds": 0, "evaluations": [],
+    "primary": None, "secondary": [], "claims": [], "grounded": False, "citations": [],
+}
+
+
 def parse_request(state: BotState) -> dict:
     """Read the question, and inherit anything this turn did not restate."""
     started = time.time()
@@ -78,6 +88,7 @@ def parse_request(state: BotState) -> dict:
         intent = llm.extract_intent(question, history)
     except llm.LLMUnavailable as exc:
         return {
+            **TURN_RESET,
             "messages": history + [{"role": "user", "content": question}],
             "failure": {"stage": "intent", "reason": str(exc)},
             "trace": _step({}, "parse_request", "error", str(exc), started),
@@ -98,15 +109,18 @@ def parse_request(state: BotState) -> dict:
         if intent["audience"] == ["general"] and carried_intent.get("audience", ["general"]) != ["general"]:
             intent = {**intent, "audience": carried_intent["audience"], "audience_from_session": True}
 
+    # Only an outdoor question updates what later turns inherit, so a "thanks" or an off-topic
+    # question in between does not wipe the activity a later "what about tomorrow?" relies on.
+    session_intent = carried_intent
+    if intent["is_outdoor_question"] and intent["activity_category"]:
+        session_intent = {"activity_category": intent["activity_category"], "audience": intent["audience"]}
+
     detail = f"{intent['activity_category'] or 'no category'} | {intent['time_window']} | {intent['location'] or 'no location'}"
     return {
+        **TURN_RESET,
         "messages": history + [{"role": "user", "content": question}],
         "intent": intent,
-        "session_intent": {"activity_category": intent["activity_category"], "audience": intent["audience"]},
-        "failure": None,
-        "facts": None,
-        "citations": [],
-        "series": None,
+        "session_intent": session_intent,
         "trace": _step({}, "parse_request", "ok", detail, started),
     }
 
@@ -344,6 +358,7 @@ def finalize(state: BotState) -> dict:
         if sop is not None
     ]
     return {
+        "answer": answer,
         "messages": state["messages"] + [{"role": "assistant", "content": answer}],
         "citations": citations,
         "trace": _step(state, "finalize", "ok", f"{len(citations)} citation(s), session now {len(state['messages']) + 1} turns", started),
@@ -416,6 +431,7 @@ def build_graph() -> "CompiledStateGraph":
     builder.add_edge(START, "parse_request")
     builder.add_conditional_edges("parse_request", route_after_parse,
                                   ["resolve_location", "no_policy_answer", "general_answer", "honest_failure"])
+
     builder.add_conditional_edges("resolve_location", route_after_location, ["fetch_weather", "honest_failure"])
     builder.add_conditional_edges("fetch_weather", route_after_weather, ["derive_facts", "honest_failure"])
     builder.add_edge("derive_facts", "match_policies")

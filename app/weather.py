@@ -23,7 +23,7 @@ DAILY_FIELDS = "precipitation_sum"
 
 TIMEOUT = 12.0
 RETRY_STATUSES = {429, 500, 502, 503, 504}
-HEADERS = {"User-Agent": "weather-advisory-bot (github.com/SatyamSingh-Git/Weather-Advisory-Support-Bot)"}
+HEADERS = {"User-Agent": "weather-advisory-bot (github.com/Harsh-Sudhakar/Weather-Advisory-Support-Bot)"}
 
 # Open-Meteo's free tier meters per IP per day, and shared hosting shares that IP with strangers.
 # A forecast does not change between two questions asked a minute apart, so caching is both the
@@ -153,8 +153,38 @@ def _pick(results: list, hint: str | None) -> dict:
     return results[0]
 
 
+# Former names users still type, which the geocoder does not know as the city. Each one otherwise
+# resolves somewhere else entirely: "Bangalore" to a town in Pakistan, "Madras" to the United
+# States, "Cochin" to Canada (and "Kochi" alone to Japan, hence the region hint).
+FORMER_NAMES = {
+    "bangalore": "Bengaluru",
+    "bombay": "Mumbai",
+    "madras": "Chennai",
+    "calcutta": "Kolkata",
+    "mysore": "Mysuru",
+    "trivandrum": "Thiruvananthapuram",
+    "benares": "Varanasi",
+    "banaras": "Varanasi",
+    "cochin": "Kochi, Kerala",
+    "pondicherry": "Puducherry",
+    "allahabad": "Prayagraj",
+    "calicut": "Kozhikode",
+    "mangalore": "Mangaluru",
+}
+
+
+def _modern_name(name: str) -> str:
+    """Swap a former city name for the current one, keeping any region the user added after it."""
+    head, comma, tail = name.partition(",")
+    modern = FORMER_NAMES.get(head.strip().casefold())
+    if not modern:
+        return name
+    return f"{modern.split(',')[0]},{tail}" if comma else modern
+
+
 def geocode(name: str) -> dict:
     """Resolve a place name to coordinates. Raises WeatherUnavailable if nothing usable comes back."""
+    name = _modern_name(name)
     for query, hint in _attempts(name):
         results = _search(query)
         if results:
@@ -206,7 +236,7 @@ def fetch_forecast(latitude: float, longitude: float) -> dict:
     try:
         ForecastPayload(**payload)
     except ValidationError as exc:
-        problems = "; ".join(f"{exc.errors()[0]['loc'][0]}: {e['msg']}" for e in exc.errors()[:2])
+        problems = "; ".join(f"{e['loc'][0]}: {e['msg']}" for e in exc.errors()[:2])
         raise WeatherUnavailable(f"weather service returned an unusable payload ({problems})") from exc
     _forecast_cache[key] = (time.time(), payload)
     return _with_age(_forecast_cache[key])
