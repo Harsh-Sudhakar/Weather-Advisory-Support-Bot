@@ -8,7 +8,7 @@
 <p align="center"><b>click to see</b></p>
 
 <h1 align="center">
-  <a href="https://140-245-253-170.nip.io" target="_blank" rel="noopener noreferrer">&#9658;&nbsp; Live Demo</a>
+  <a href="https://karaoke-highways-copying-discrimination.trycloudflare.com" target="_blank" rel="noopener noreferrer">&#9658;&nbsp; Live Demo</a>
 </h1>
 
 <p align="center">
@@ -40,7 +40,7 @@
 
 | | |
 | --- | --- |
-| [Live demo](https://140-245-253-170.nip.io) | The deployed instance |
+| [Live demo](https://karaoke-highways-copying-discrimination.trycloudflare.com) | The deployed instance |
 | [Quick start](#quick-start) | Run it in four commands |
 | [What you can click](#what-you-can-click) | The four inspector tabs |
 | [How it works](#how-it-works) | The graph, node by node |
@@ -464,7 +464,7 @@ breaking &mdash; worth knowing before trusting a green suite.
 connect this repo**, accept the blueprint, and set `OPENROUTER_API_KEY` in the dashboard (never in
 the repo). `/health` is the health-check path and returns the number of policies loaded.
 
-The live instance is at **<https://140-245-253-170.nip.io>**, on an Oracle Cloud Always Free VM.
+The live instance is at **<https://karaoke-highways-copying-discrimination.trycloudflare.com>**, on an Oracle Cloud Always Free VM.
 
 ### Oracle Cloud Always Free (what the live URL runs on)
 
